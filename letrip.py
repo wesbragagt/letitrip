@@ -1,3 +1,4 @@
+import time
 import subprocess
 import os
 import sys
@@ -10,6 +11,68 @@ class TransformToMp4Error(Exception):
 
 def usage():
     print("Usage: python3 letrip.py <drive_path> <output_dir>")
+
+def parse_progress(line: str):
+    """
+    Parses progress output from MakeMKV.
+    Example:
+
+    PRGV:40270,20467,65536
+    PRGV:40285,20467,65536
+    PRGV:40285,20474,65536
+    PRGV:40343,20474,65536
+    """
+    values = line.split(':')[1].split(',')
+    value1, value2, max_value = map(int, values)
+    percentage = (value1 / max_value) * 100
+
+    return percentage
+
+def get_human_readable_estimated_time(average: float, time_started: float):
+    """
+    Returns HH:MM:SS format of the estimated time remaining
+    """
+    estimated_time = (100 - average) * (time.time() - time_started) / average
+    output = time.strftime("%H:%M:%S", time.gmtime(estimated_time))
+
+    return output
+
+
+
+def shell_command(command: str, retries = 3):
+    time_started = time.time()
+    with subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        shell=True
+    ) as proc:
+        stdout = proc.stdout
+        if stdout:
+            percentages = []
+            for line in stdout:
+                if line.startswith('PRGV:'):
+                    percentage = parse_progress(line)
+                    if percentage > 0 and percentage < 100:
+                        percentages.append(percentage)
+                        average = sum(percentages) / len(percentages)
+                        estimated_time = get_human_readable_estimated_time(average, time_started)
+                        print(f'\rProgress: {percentage:.2f}%, Estimated time remaining: {estimated_time}\r', end='')
+
+                    else:
+                        percentages = []
+                        print(f'\rProgress: {percentage:.2f}%', end='')
+                    
+                else:
+                    print(line)
+
+        stderr = proc.stderr
+        if stderr:
+            for line in stderr:
+                print(line)
+
+        return proc
 
 
 def prepare_output_dir(output_dir: str) -> str:
@@ -33,9 +96,7 @@ def main(mp4_movie_name: str, min_length: int):
     # Rip DVD using makemkvcon first
     mkv_path = prepare_output_dir("/tmp/makemkv")
 
-    exit_code = os.system(f"makemkvcon mkv disc:0 all {mkv_path} --minlength={min_length} --progress=-same --robot --debug")
-    if exit_code != 0:
-        raise Exception("Failed to rip DVD using MakeMKV")
+    shell_command(f"makemkvcon mkv disc:0 all '{mkv_path}' --minlength {min_length} --progress=-same --robot --debug")
 
     files_created = os.listdir(mkv_path)
 
@@ -49,8 +110,13 @@ def main(mp4_movie_name: str, min_length: int):
 
     output_dir = prepare_output_dir(f"/Volumes/Media/Movies/{mp4_movie_name}")
     mp4_file_path = os.path.join(output_dir, f"{mp4_movie_name}.mp4")
-
-    os.system(f"HandBrakeCLI -i '{mkv_file}' -o '{mp4_file_path}'")
+    
+    """
+    -e x264: Uses the x264 encoder
+    -q 22.0: Sets the Constant Rate Factor (CRF) to 22, which aims for high quality
+    -r 23.976: Sets the frame rate to 23.976 fps (standard for 1080p)
+    """
+    os.system(f"HandBrakeCLI -i '{mkv_file}' -o '{mp4_file_path}' -e x264 -q 22.0 -r 23.976 -vf 'scale=1920:1080,format=yuv420p,y4:0' -a 1 -E av_aac -b:a 128 -B:a 192 --crop='0:0:0:0'")
 
 
 def signal_handler(sig, frame):
