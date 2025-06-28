@@ -10,7 +10,7 @@ class TransformToMp4Error(Exception):
 
 
 def usage():
-    print("Usage: python3 letrip.py <drive_path> <output_dir>")
+    print("Usage: python3 letrip.py <title>")
 
 def parse_progress(line: str):
     """
@@ -129,10 +129,20 @@ signal.signal(signal.SIGINT, signal_handler)
 if __name__ == "__main__":
     try:
         if len(sys.argv) != 2:
+            print(sys.argv)
             usage()
             sys.exit(1)
+
         min_length = int(os.getenv("MIN_LENGTH", 900))
-        main(sys.argv[1], min_length)
+        title = sys.argv[1]
+        # Prompt to confirm to proceed and rip informing about wahts about to happen 
+        
+        answer = input(f"Are you sure you want to rip the DVD and convert it to MP4 with the title '{title}'? (yes/no): ").strip().lower()
+
+        if answer == "y" or answer == "yes":
+            main(title, min_length)
+        else:
+            sys.exit(0)
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user")
