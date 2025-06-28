@@ -1,9 +1,5 @@
-import pytest
-import time
-import os
-import shutil
 import sys
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, MagicMock
 
 sys.path.append('.')
 from letrip import parse_progress, get_human_readable_estimated_time, shell_command, prepare_output_dir
@@ -19,7 +15,6 @@ class TestParseProgress:
     def test_parse_progress_different_values(self):
         line = "PRGV:32768,16384,65536"
         result = parse_progress(line)
-        expected = (32768 / 65536) * 100
         assert abs(result - 50.0) < 0.01
 
     def test_parse_progress_zero_progress(self):
