@@ -85,7 +85,7 @@ def prepare_output_dir(output_dir: str) -> str:
     return output_dir
 
 
-def main(mp4_movie_name: str, min_length: int, copy_to: str = None):
+def main(mp4_movie_name: str, min_length: int, copy_to: str | None = None):
     """
     The command will create a folder named 'PolarExpress' in the movies directory if it doesn't exist and rip the DVD to that folder in a mp4 i.e PolarExpress.mp4
     """
