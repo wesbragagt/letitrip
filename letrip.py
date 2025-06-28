@@ -3,6 +3,8 @@ import subprocess
 import os
 import sys
 import signal
+import argparse
+import shutil
 
 class TransformToMp4Error(Exception):
     def __init__(self):
@@ -10,7 +12,7 @@ class TransformToMp4Error(Exception):
 
 
 def usage():
-    print("Usage: python3 letrip.py <title>")
+    print("Usage: python3 letrip.py <title> [--copy <destination_directory>]")
 
 def parse_progress(line: str):
     """
@@ -83,9 +85,9 @@ def prepare_output_dir(output_dir: str) -> str:
     return output_dir
 
 
-def main(mp4_movie_name: str, min_length: int):
+def main(mp4_movie_name: str, min_length: int, copy_to: str = None):
     """
-    The command will create a folder named 'PolarExpress' in the Movies directory if it doesn't exist and rip the DVD to that folder in a mp4 i.e PolarExpress.mp4
+    The command will create a folder named 'PolarExpress' in the movies directory if it doesn't exist and rip the DVD to that folder in a mp4 i.e PolarExpress.mp4
     """
     # Clean up /tmp/makemkv
     exit_code = os.system("rm -rf /tmp/makemkv")
@@ -108,7 +110,7 @@ def main(mp4_movie_name: str, min_length: int):
 
     print(f"Converting {mkv_file} to mp4")
 
-    output_dir = prepare_output_dir(f"~/Movies/{mp4_movie_name}")
+    output_dir = prepare_output_dir(f"./movies/{mp4_movie_name}")
     mp4_file_path = os.path.join(output_dir, f"{mp4_movie_name}.mp4")
     
     """
@@ -117,6 +119,17 @@ def main(mp4_movie_name: str, min_length: int):
     -r 23.976: Sets the frame rate to 23.976 fps (standard for 1080p)
     """
     os.system(f"HandBrakeCLI -i '{mkv_file}' -o '{mp4_file_path}' -e x264 -q 22.0 -r 23.976 -vf 'scale=1920:1080,format=yuv420p,y4:0' -a 1 -E av_aac -b:a 128 -B:a 192 --crop='0:0:0:0'")
+    
+    # Copy to destination directory if specified
+    if copy_to:
+        copy_destination = os.path.expanduser(copy_to)
+        if not os.path.exists(copy_destination):
+            os.makedirs(copy_destination)
+        
+        destination_file = os.path.join(copy_destination, f"{mp4_movie_name}.mp4")
+        print(f"Copying {mp4_file_path} to {destination_file}")
+        shutil.copy2(mp4_file_path, destination_file)
+        print(f"Successfully copied to {destination_file}")
 
 
 def signal_handler(sig, frame):
@@ -128,19 +141,21 @@ signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 2:
-            print(sys.argv)
-            usage()
-            sys.exit(1)
+        parser = argparse.ArgumentParser(description="Rip DVD and convert to MP4")
+        parser.add_argument("title", help="Movie title for the output file")
+        parser.add_argument("--copy", dest="copy_to", help="Directory to copy the final MP4 file to")
+        
+        args = parser.parse_args()
 
         min_length = int(os.getenv("MIN_LENGTH", 900))
-        title = sys.argv[1]
-        # Prompt to confirm to proceed and rip informing about wahts about to happen 
+        title = args.title
+        copy_to = args.copy_to
         
-        answer = input(f"Are you sure you want to rip the DVD and convert it to MP4 with the title '{title}'? (yes/no): ").strip().lower()
+        copy_info = f" and copy to {copy_to}" if copy_to else ""
+        answer = input(f"Are you sure you want to rip the DVD and convert it to MP4 with the title '{title}'{copy_info}? (yes/no): ").strip().lower()
 
         if answer == "y" or answer == "yes":
-            main(title, min_length)
+            main(title, min_length, copy_to)
         else:
             sys.exit(0)
 
