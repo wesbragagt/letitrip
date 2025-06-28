@@ -108,7 +108,7 @@ def main(mp4_movie_name: str, min_length: int):
 
     print(f"Converting {mkv_file} to mp4")
 
-    output_dir = prepare_output_dir(f"/Volumes/Media/Movies/{mp4_movie_name}")
+    output_dir = prepare_output_dir(f"~/Movies/{mp4_movie_name}")
     mp4_file_path = os.path.join(output_dir, f"{mp4_movie_name}.mp4")
     
     """

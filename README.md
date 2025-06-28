@@ -60,7 +60,7 @@ MIN_LENGTH=1200 python3 letrip.py "MovieTitle"
    - 1920x1080 resolution
    - 23.976 fps frame rate
    - AAC audio encoding
-5. Saves the final MP4 to `/Volumes/Media/Movies/[MovieTitle]/[MovieTitle].mp4`
+5. Saves the final MP4 to `~/Movies/[MovieTitle]/[MovieTitle].mp4`
 
 ### Progress Tracking
 
