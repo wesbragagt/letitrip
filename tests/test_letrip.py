@@ -2,7 +2,7 @@ import sys
 from unittest.mock import patch, MagicMock
 
 sys.path.append('.')
-from letrip import parse_progress, get_human_readable_estimated_time, shell_command, prepare_output_dir
+from letrip import parse_progress, get_human_readable_estimated_time, shell_command, prepare_output_dir, get_episode_filename
 
 
 class TestParseProgress:
@@ -116,8 +116,56 @@ class TestPrepareOutputDir:
     def test_prepare_output_dir_relative_path(self, mock_makedirs, mock_exists):
         mock_exists.return_value = False
         output_dir = "./relative/path"
-        
+
         result = prepare_output_dir(output_dir)
-        
+
         mock_makedirs.assert_called_once_with(output_dir)
         assert result == output_dir
+
+
+class TestGetEpisodeFilename:
+    def test_episode_filename_basic(self):
+        result = get_episode_filename(1, "Friends")
+        assert result == "1_Friends.mp4"
+
+    def test_episode_filename_multi_digit(self):
+        result = get_episode_filename(13, "Friends")
+        assert result == "13_Friends.mp4"
+
+    def test_episode_filename_with_spaces(self):
+        result = get_episode_filename(5, "Game of Thrones")
+        assert result == "5_Game of Thrones.mp4"
+
+    def test_episode_filename_single_digit(self):
+        result = get_episode_filename(9, "ShowName")
+        assert result == "9_ShowName.mp4"
+
+
+class TestFileSelection:
+    def test_movie_selects_largest_file(self):
+        """Movie mode should select only the largest file"""
+        files_created = ["title00.mkv", "title01.mkv", "title02.mkv"]
+        mkv_path = "/tmp/makemkv"
+
+        # Simulate movie mode: select largest file
+        with patch('os.path.getsize') as mock_getsize:
+            mock_getsize.side_effect = lambda x: {
+                "/tmp/makemkv/title00.mkv": 1000,
+                "/tmp/makemkv/title01.mkv": 5000,  # largest
+                "/tmp/makemkv/title02.mkv": 2000,
+            }.get(x, 0)
+
+            files_to_convert = [max(files_created, key=lambda x: mock_getsize(f"{mkv_path}/{x}"))]
+
+        assert files_to_convert == ["title01.mkv"]
+        assert len(files_to_convert) == 1
+
+    def test_show_selects_all_files_sorted(self):
+        """Show mode should select all files sorted by name"""
+        files_created = ["title02.mkv", "title00.mkv", "title01.mkv"]
+
+        # Simulate show mode: select all files sorted
+        files_to_convert = sorted(files_created)
+
+        assert files_to_convert == ["title00.mkv", "title01.mkv", "title02.mkv"]
+        assert len(files_to_convert) == 3

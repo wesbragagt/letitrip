@@ -208,3 +208,6 @@ __marimo__/
 
 # Movies output directory
 movies/
+
+# TV Shows output directory
+shows/

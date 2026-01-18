@@ -85,7 +85,19 @@ def prepare_output_dir(output_dir: str) -> str:
     return output_dir
 
 
-def main(mp4_movie_name: str, min_length: int, copy_to: str | None = None):
+def get_episode_filename(episode_num: int, title: str) -> str:
+    """Generate filename like '1_title.mp4'"""
+    return f"{episode_num}_{title}.mp4"
+
+
+def main(
+    title: str,
+    min_length: int,
+    copy_to: str | None = None,
+    content_type: str = "movie",
+    season: int = 1,
+    start_episode: int = 1
+):
     """
     The command will create a folder named 'PolarExpress' in the movies directory if it doesn't exist and rip the DVD to that folder in a mp4 i.e PolarExpress.mp4
     """
@@ -104,32 +116,61 @@ def main(mp4_movie_name: str, min_length: int, copy_to: str | None = None):
 
     print(f"Files created by MakeMKV: {files_created}")
 
-    # Convert the largest mkv file to mp4 using Handbrake
-    largest_file = max(files_created, key=lambda x: os.path.getsize(os.path.join(mkv_path, x)))
-    mkv_file = os.path.join(mkv_path, largest_file)
+    if content_type == "movie":
+        # Movie: select largest file only
+        files_to_convert = [max(files_created, key=lambda x: os.path.getsize(os.path.join(mkv_path, x)))]
+    else:
+        # Show: convert all files, sorted by name (title00.mkv, title01.mkv preserves disc order)
+        files_to_convert = sorted(files_created)
 
-    print(f"Converting {mkv_file} to mp4")
+    if content_type == "movie":
+        output_dir = prepare_output_dir(f"./movies/{title}")
+    else:
+        output_dir = prepare_output_dir(f"./shows/{title}/Season {season}")
 
-    output_dir = prepare_output_dir(f"./movies/{mp4_movie_name}")
-    mp4_file_path = os.path.join(output_dir, f"{mp4_movie_name}.mp4")
-    
+    converted_files = []
+
     """
     -e x264: Uses the x264 encoder
     -q 22.0: Sets the Constant Rate Factor (CRF) to 22, which aims for high quality
     -r 23.976: Sets the frame rate to 23.976 fps (standard for 1080p)
     """
-    os.system(f"HandBrakeCLI -i '{mkv_file}' -o '{mp4_file_path}' -e x264 -q 22.0 -r 23.976 -vf 'scale=1920:1080,format=yuv420p,y4:0' -a 1 -E av_aac -b:a 128 -B:a 192 --crop='0:0:0:0'")
-    
+    for idx, mkv_filename in enumerate(files_to_convert):
+        mkv_file = os.path.join(mkv_path, mkv_filename)
+
+        if content_type == "movie":
+            mp4_filename = f"{title}.mp4"
+        else:
+            episode_num = start_episode + idx
+            mp4_filename = get_episode_filename(episode_num, title)
+
+        mp4_file_path = os.path.join(output_dir, mp4_filename)
+
+        print(f"Converting {mkv_file} to {mp4_filename} ({idx + 1}/{len(files_to_convert)})")
+
+        os.system(f"HandBrakeCLI -i '{mkv_file}' -o '{mp4_file_path}' -e x264 -q 22.0 -r 23.976 -vf 'scale=1920:1080,format=yuv420p,y4:0' -a 1 -E av_aac -b:a 128 -B:a 192 --crop='0:0:0:0'")
+
+        converted_files.append(mp4_file_path)
+
     # Copy to destination directory if specified
     if copy_to:
         copy_destination = os.path.expanduser(copy_to)
-        if not os.path.exists(copy_destination):
-            os.makedirs(copy_destination)
-        
-        destination_file = os.path.join(copy_destination, f"{mp4_movie_name}.mp4")
-        print(f"Copying {mp4_file_path} to {destination_file}")
-        shutil.copy2(mp4_file_path, destination_file)
-        print(f"Successfully copied to {destination_file}")
+
+        if content_type == "movie":
+            dest_folder = os.path.join(copy_destination, title)
+        else:
+            dest_folder = os.path.join(copy_destination, title, f"Season {season}")
+
+        if not os.path.exists(dest_folder):
+            os.makedirs(dest_folder)
+
+        for mp4_file_path in converted_files:
+            filename = os.path.basename(mp4_file_path)
+            destination_file = os.path.join(dest_folder, filename)
+            print(f"Copying {filename} to {destination_file}")
+            shutil.copy2(mp4_file_path, destination_file)
+
+        print(f"Successfully copied {len(converted_files)} file(s) to {dest_folder}")
 
 
 def signal_handler(sig, frame):
@@ -144,18 +185,30 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(description="Rip DVD and convert to MP4")
         parser.add_argument("title", help="Movie title for the output file")
         parser.add_argument("--copy", dest="copy_to", help="Directory to copy the final MP4 file to")
-        
+        parser.add_argument("--type", choices=["movie", "show"], default="movie",
+                            help="Content type: 'movie' (default) or 'show'")
+        parser.add_argument("--season", type=int, default=1,
+                            help="Season number for TV shows (default: 1)")
+        parser.add_argument("--start-episode", type=int, default=1,
+                            help="Starting episode number (default: 1)")
+
         args = parser.parse_args()
 
         min_length = int(os.getenv("MIN_LENGTH", 900))
         title = args.title
         copy_to = args.copy_to
-        
+        content_type = args.type
+        season = args.season
+        start_episode = args.start_episode
+
         copy_info = f" and copy to {copy_to}" if copy_to else ""
-        answer = input(f"Are you sure you want to rip the DVD and convert it to MP4 with the title '{title}'{copy_info}? (yes/no): ").strip().lower()
+        if content_type == "show":
+            answer = input(f"Rip TV show '{title}' Season {season} starting at episode {start_episode}{copy_info}? (yes/no): ").strip().lower()
+        else:
+            answer = input(f"Rip movie '{title}'{copy_info}? (yes/no): ").strip().lower()
 
         if answer == "y" or answer == "yes":
-            main(title, min_length, copy_to)
+            main(title, min_length, copy_to, content_type, season, start_episode)
         else:
             sys.exit(0)
 
